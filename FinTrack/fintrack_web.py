@@ -7,7 +7,7 @@ import pandas as pd
 from datetime import datetime
 from fintrack import FinTrack  # usa sua classe existente
 
-st.set_page_config(page_title="FinTrack Web (Completo)", layout="wide")
+st.set_page_config(page_title="FinTrack Web (Beta 0,0012)", layout="wide")
 
 # instância do sistema (usa o mesmo arquivo JSON)
 sistema = FinTrack()
