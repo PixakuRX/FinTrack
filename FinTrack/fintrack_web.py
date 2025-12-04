@@ -49,7 +49,6 @@ def transacoes_para_df(transacoes):
     df['data'] = df['data'].dt.strftime('%d/%m/%Y')
     return df
 
-st.title("📊 FinTrack — Versão Web Completa")
 
 # ---------- ADICIONAR RECEITA ----------
 if menu == "➕ Adicionar Receita":
@@ -220,3 +219,4 @@ elif menu == "🗑️ Deletar Transação":
                 sistema.salvar_dados()
                 st.success("Transação deletada com sucesso!")
                 st.experimental_rerun()
+
