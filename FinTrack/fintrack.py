@@ -1,41 +1,138 @@
-import json
+
 import os
 from datetime import datetime, timedelta
 from collections import defaultdict
 import statistics
-import re    
+import re  
+import sqlite3
+from datetime import datetime
+
 class FinTrack:  # Aplicativo funcional feito para portifólio (propriedade autoral/intelectual de Eduardo J.)'''
-    def __init__(self, arquivo_dados='fintrack_data.json'):
-        self.arquivo_dados = arquivo_dados
-        self.transacoes = []
-        self.categorias_padrao = {
-            'receita': ['Salário', 'Freelance', 'Investimentos', 'Outros'],
-            'despesa': ['Alimentação', 'Transporte', 'Moradia', 'Saúde', 
-                       'Entretenimento', 'Educação', 'Vestuário', 'Outros']
-        }
-        self.carregar_dados()
+    # ================================
+    #  🔻 1. Inicializa e conecta ao banco
+    # ================================
+    def __init__(self, banco='fintrack.db'):
+        self.conexao = sqlite3.connect(banco)
+        self.cursor = self.conexao.cursor()
+        self.criar_tabela()
+
+    # ================================
+    #  🔻 2. Criação automática da tabela
+    # ================================
+    def criar_tabela(self):
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS transacoes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tipo TEXT NOT NULL,
+                descricao TEXT,
+                valor REAL NOT NULL,
+                data TEXT NOT NULL
+            )
+        """)
+        self.conexao.commit()
+
+    # ================================
+    #  🔻 3. Adicionar transação (C - Create)
+    # ================================
+    def adicionar_transacao(self, tipo, descricao, valor, data=None):
+        if data is None:
+            data = datetime.now().strftime("%Y-%m-%d")
+
+        self.cursor.execute("""
+            INSERT INTO transacoes (tipo, descricao, valor, data)
+            VALUES (?, ?, ?, ?)
+        """, (tipo, descricao, valor, data))
+
+        self.conexao.commit()
+        print("✔ Transação adicionada com sucesso!")
+
+    # ================================
+    #  🔻 4. Listar transações (R - Read)
+    # ================================
+    def listar_transacoes(self):
+        self.cursor.execute("SELECT * FROM transacoes ORDER BY data DESC")
+        transacoes = self.cursor.fetchall()
+
+        print("\n=== LISTA DE TRANSAÇÕES ===")
+        for t in transacoes:
+            print(f"ID: {t[0]} | Tipo: {t[1]} | Descrição: {t[2]} | Valor: {t[3]} | Data: {t[4]}")
+
+    # ================================
+    #  🔻 5. Editar transação (U - Update)
+    # ================================
+    def editar_transacao(self, id, novo_tipo, nova_desc, novo_valor, nova_data):
+        self.cursor.execute("""
+            UPDATE transacoes
+            SET tipo = ?, descricao = ?, valor = ?, data = ?
+            WHERE id = ?
+        """, (novo_tipo, nova_desc, novo_valor, nova_data, id))
+
+        self.conexao.commit()
+        print("✔ Transação atualizada!")
+
+    # ================================
+    #  🔻 6. Excluir transação (D - Delete)
+    # ================================
+    def excluir_transacao(self, id):
+        self.cursor.execute("DELETE FROM transacoes WHERE id = ?", (id,))
+        self.conexao.commit()
+        print("❌ Transação removida com sucesso.")
+
+    # ================================
+    #  🔻 7. Fechar banco
+    # ================================
+    def fechar(self):
+        self.conexao.close()
+
+# =======================================================================================
+# 📌 Exemplo de uso no terminal
+# =======================================================================================
+if __name__ == "__main__":
+    app = FinTrack()
+
+    while True:
+        print("\n========================")
+        print("   FINTRACK - SQLITE   ")
+        print("========================")
+        print("[1] Adicionar transação")
+        print("[2] Listar transações")
+        print("[3] Editar transação")
+        print("[4] Excluir transação")
+        print("[5] Sair")
+        opcao = input("Escolha: ")
+
+        if opcao == "1":
+            tipo = input("Tipo (entrada/saída): ")
+            desc = input("Descrição: ")
+            valor = float(input("Valor: "))
+            app.adicionar_transacao(tipo, desc, valor)
+
+        elif opcao == "2":
+            app.listar_transacoes()
+
+        elif opcao == "3":
+            id = int(input("ID para editar: "))
+            tipo = input("Novo tipo: ")
+            desc = input("Nova descrição: ")
+            valor = float(input("Novo valor: "))
+            data = input("Nova data (YYYY-MM-DD): ")
+            app.editar_transacao(id, tipo, desc, valor, data)
+
+        elif opcao == "4":
+            id = int(input("ID para excluir: "))
+            app.excluir_transacao(id)
+
+        elif opcao == "5":
+            app.fechar()
+            print("Encerrando...")
+            break
+
+        else:
+            print("❗ Opção inválida, tente novamente.")  
+
     
-    def carregar_dados(self):
-        """Carrega dados do arquivo JSON com tratamento de erros"""
-        try:
-            if os.path.exists(self.arquivo_dados):
-                with open(self.arquivo_dados, 'r', encoding='utf-8') as f:
-                    self.transacoes = json.load(f)
-            else:
-                self.transacoes = []
-        except (json.JSONDecodeError, IOError) as e:
-            print(f"⚠️  Erro ao carregar dados: {e}")
-            print("Iniciando com dados vazios...")
-            self.transacoes = []
-    
-    def salvar_dados(self):
-        """Salva dados no arquivo JSON com tratamento de erros"""
-        try:
-            with open(self.arquivo_dados, 'w', encoding='utf-8') as f:
-                json.dump(self.transacoes, f, indent=2, ensure_ascii=False)
-        except IOError as e:
-            print(f"❌ Erro ao salvar dados: {e}")
-    
+
+
     def validar_valor(self, entrada):
         """Valida e converte entrada de valor monetário"""
         # Remove espaços, R$, vírgulas
