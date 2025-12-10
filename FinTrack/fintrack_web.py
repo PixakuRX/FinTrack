@@ -342,8 +342,12 @@ if menu == "🔮 Previsão Próximo Mês":
         st.subheader("📌 Resultado Final")
 
         icone = "🟢" if previsao > m3 else "🔴"
-        st.write(f"{icone} **Previsão para o próximo mês:**  
-        💰 Estimativa aproximada: **R$ {previsao:.2f}**")
+        st.write(
+        f"{icone} **Previsão para o próximo mês:**\n"
+        f"💰 Estimativa aproximada: **R$ {previsao:.2f}**"
+        )
+
+
 
         # Insight narrativo 
         st.info(f"""
@@ -451,5 +455,6 @@ if menu == "🗑️ Excluir Transação":
 if menu == "🚪 Logout":
     st.session_state.user_id=None
     st.rerun()
+
 
 
