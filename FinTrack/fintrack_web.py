@@ -135,7 +135,7 @@ def interface_login():
         if user_id:
             st.session_state["usuario"] = usuario
             st.session_state["user_id"] = user_id
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("Usuário ou senha incorretos.")
 
@@ -267,3 +267,4 @@ elif st.session_state["pagina"] == "registro":
 
 else:
     app_principal()
+
