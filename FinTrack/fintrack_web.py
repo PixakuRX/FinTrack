@@ -35,7 +35,7 @@ def criar_tabelas():
     )
     """)
 
-    # 🔥 NOVA TABELA DE ORÇAMENTO (BUDGET)
+    #  NOVA TABELA DE ORÇAMENTO (BUDGET)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS orcamentos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -183,7 +183,7 @@ menu = st.sidebar.radio("Menu", [
     "📊 Analytics",
     "🔮 Previsão Próximo Mês",
     "💡 Recomendações",
-    "📌 Orçamento (Budget)",   # 🔥 NOVA FUNÇÃO
+    "📌 Orçamento (Budget)",   # NOVA FUNÇÃO
     "🗑️ Excluir Transação",
     "🚪 Logout"
 ])
@@ -295,3 +295,4 @@ if menu == "🗑️ Excluir Transação":
 if menu == "🚪 Logout":
     st.session_state.user_id=None
     st.rerun()
+
