@@ -1,12 +1,12 @@
-import sqlite3
 import streamlit as st
+import sqlite3
 import pandas as pd
-import matplotlib.pyplot as plt
-from datetime import datetime
+from datetime import datetime, date
 
-# ================================
-#   BANCO DE DADOS
-# ================================
+# ==========================================================
+# 🔥  BANCO DE DADOS — SQLite
+# ==========================================================
+
 def conectar():
     return sqlite3.connect("fintrack.db", check_same_thread=False)
 
@@ -17,36 +17,33 @@ def criar_tabelas():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario TEXT UNIQUE NOT NULL,
-        senha TEXT NOT NULL
-    )
-    """)
+        usuario TEXT UNIQUE,
+        senha TEXT
+    )""")
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS transacoes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario_id INTEGER NOT NULL,
-        tipo TEXT NOT NULL,
-        valor REAL NOT NULL,
+        usuario_id INTEGER,
+        tipo TEXT,
+        valor REAL,
         categoria TEXT,
         descricao TEXT,
-        data TEXT NOT NULL,
+        data TEXT,
         FOREIGN KEY(usuario_id) REFERENCES usuarios(id)
-    )
-    """)
+    )""")
 
     conn.commit()
-    conn.close()
 
 criar_tabelas()
 
-# ================================
-#  AUTENTICAÇÃO / LOGIN / REGISTRO
-# ================================
-def registrar_user(usuario, senha):
+# ==========================================================
+# 🔹 FUNÇÕES DE LOGIN / REGISTRO
+# ==========================================================
+
+def registrar_usuario(usuario, senha):
     conn = conectar()
     cursor = conn.cursor()
-
     try:
         cursor.execute("INSERT INTO usuarios (usuario, senha) VALUES (?,?)", (usuario, senha))
         conn.commit()
@@ -54,21 +51,20 @@ def registrar_user(usuario, senha):
     except:
         return False
 
-def login(usuario, senha):
+def autenticar(usuario, senha):
     conn = conectar()
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM usuarios WHERE usuario = ? AND senha = ?", (usuario, senha))
-    result = cursor.fetchone()
-    return result[0] if result else None
+    cursor.execute("SELECT id FROM usuarios WHERE usuario=? AND senha=?", (usuario, senha))
+    r = cursor.fetchone()
+    return r[0] if r else None
 
+# ==========================================================
+# 🔥 CRUD de Transações — com DATA MANUAL incluída
+# ==========================================================
 
-# ================================
-#    CRUD FINANCEIRO (SQLite)
-# ================================
-def adicionar_transacao(user_id, tipo, valor, categoria, descricao):
+def adicionar_transacao(user_id, tipo, valor, categoria, descricao, data):
     conn = conectar()
     cursor = conn.cursor()
-    data = datetime.now().strftime("%Y-%m-%d")
     cursor.execute("""
     INSERT INTO transacoes (usuario_id, tipo, valor, categoria, descricao, data)
     VALUES (?,?,?,?,?,?)
@@ -77,150 +73,197 @@ def adicionar_transacao(user_id, tipo, valor, categoria, descricao):
 
 def listar_transacoes(user_id):
     conn = conectar()
-    df = pd.read_sql_query("SELECT * FROM transacoes WHERE usuario_id = ?", conn, params=[user_id])
-    return df
+    return pd.read_sql_query(f"SELECT * FROM transacoes WHERE usuario_id={user_id}", conn)
 
-def editar_transacao(id, valor, categoria, descricao):
-    conn = conectar()
-    cursor = conn.cursor()
-    cursor.execute("""
-    UPDATE transacoes SET valor=?, categoria=?, descricao=? WHERE id=?
-    """, (valor, categoria, descricao, id))
-    conn.commit()
-
-def deletar_transacao(id):
+def excluir_transacao(id):
     conn = conectar()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM transacoes WHERE id=?", (id,))
     conn.commit()
 
+def editar_transacao(id, valor, categoria, descricao, data):
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE transacoes SET valor=?, categoria=?, descricao=?, data=? WHERE id=?",
+                   (valor, categoria, descricao, data, id))
+    conn.commit()
 
-# ================================
-#   📊 Analytics
-# ================================
-def gerar_relatorio(user_id):
+# ==========================================================
+# 📊 DASHBOARD FINANCEIRO (Gráficos e Tabelas)
+# ==========================================================
+
+def dashboard(user_id):
     df = listar_transacoes(user_id)
+
     if df.empty:
-        return None, None
+        st.warning("Nenhuma transação registrada ainda.")
+        return
 
-    total_gastos = df[df["tipo"]=="despesa"]["valor"].sum()
-    total_receitas = df[df["tipo"]=="receita"]["valor"].sum()
-    saldo = total_receitas - total_gastos
+    st.subheader("📌 Resumo Financeiro")
+    receita = df[df["tipo"] == "receita"]["valor"].sum()
+    despesa = df[df["tipo"] == "despesa"]["valor"].sum()
+    saldo = receita - despesa
 
-    return total_receitas, total_gastos, saldo
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Receitas", f"R$ {receita:.2f}")
+    col2.metric("Total Despesas", f"R$ {despesa:.2f}")
+    col3.metric("Saldo Atual", f"R$ {saldo:.2f}")
 
-def prever_prox_mes(user_id):
-    df = listar_transacoes(user_id)
-    if df.empty:
-        return "Dados insuficientes"
-
-    ultimos = df.tail(3)["valor"].mean()
-    return round(ultimos,2)
-
-def recomenda_financeiro(user_id):
-    receitas, gastos, saldo = gerar_relatorio(user_id)
-    if saldo < 0:
-        return "⚠ Você está gastando mais do que ganha! Corte despesas urgentes."
-    elif saldo < receitas * 0.2:
-        return "🟡 Bom controle, mas margem baixa. Tente guardar mais 10%."
-    else:
-        return "🟢 Excelente! Continue assim e invista o excedente."
-
-
-# ================================
-#           INTERFACE WEB
-# ================================
-st.title("💰 FINTRACK WEB — Controle Financeiro")
-
-# LOGIN
-if "user_id" not in st.session_state:
-    st.session_state.user_id = None
-
-if st.session_state.user_id is None:
-
-    tab1, tab2 = st.tabs(["🔐 Login", "📝 Criar Conta"])
-
-    with tab1:
-        usuario = st.text_input("Usuário")
-        senha = st.text_input("Senha", type="password")
-        if st.button("Entrar"):
-            uid = login(usuario, senha)
-            if uid:
-                st.session_state.user_id = uid
-                st.rerun()
-            else:
-                st.error("Usuário ou senha incorretos")
-
-    with tab2:
-        new_user = st.text_input("Novo usuário")
-        new_pass = st.text_input("Nova senha", type="password")
-        if st.button("Registrar-se"):
-            if registrar_user(new_user, new_pass):
-                st.success("Conta criada com sucesso! Agora faça login.")
-            else:
-                st.error("Usuário já existe")
-
-    st.stop()
-
-
-# ================================
-#        MENU PRINCIPAL (WEB)
-# ================================
-menu = st.sidebar.radio("Menu", [
-    "➕ Adicionar Receita",
-    "➖ Adicionar Despesa",
-    "📋 Listar Transações",
-    "📊 Analytics",
-    "🔮 Previsão Próximo Mês",
-    "💡 Recomendações",
-    "🗑️ Excluir Transação",
-    "🚪 Logout"
-])
-
-user_id = st.session_state.user_id
-
-if menu == "➕ Adicionar Receita":
-    valor = st.number_input("Valor", min_value=0.0, format="%.2f")
-    categoria = st.text_input("Categoria")
-    descricao = st.text_area("Descrição")
-    if st.button("Salvar Receita"):
-        adicionar_transacao(user_id,"receita",valor,categoria,descricao)
-        st.success("Receita registrada!")
-
-if menu == "➖ Adicionar Despesa":
-    valor = st.number_input("Valor", min_value=0.0, format="%.2f")
-    categoria = st.text_input("Categoria")
-    descricao = st.text_area("Descrição")
-    if st.button("Salvar Despesa"):
-        adicionar_transacao(user_id,"despesa",valor,categoria,descricao)
-        st.success("Despesa registrada!")
-
-if menu == "📋 Listar Transações":
-    df = listar_transacoes(user_id)
+    st.subheader("📊 Histórico Completo")
     st.dataframe(df)
 
-if menu == "📊 Analytics":
-    receitas, gastos, saldo = gerar_relatorio(user_id)
-    st.write(f"📥 Total Receitas: **R$ {receitas:.2f}**")
-    st.write(f"📤 Total Gastos: **R$ {gastos:.2f}**")
-    st.write(f"💰 Saldo Final: **R$ {saldo:.2f}**")
+    df["data"] = pd.to_datetime(df["data"])
+    df_group = df.groupby(["data","tipo"])["valor"].sum().reset_index()
 
-if menu == "🔮 Previsão Próximo Mês":
-    st.subheader("Previsão baseada nos últimos 3 meses:")
-    st.write(f"📈 Próxima estimativa: **R$ {prever_prox_mes(user_id)}**")
+    st.subheader("📈 Evolução Financeira")
+    st.line_chart(df_group, x="data", y="valor", color="tipo")
 
-if menu == "💡 Recomendações":
-    st.subheader("Sugestão automatizada:")
-    st.write(recomenda_financeiro(user_id))
+    st.success("Dashboard carregado com sucesso.")
 
-if menu == "🗑️ Excluir Transação":
-    df = listar_transacoes(user_id)
-    id_del = st.selectbox("ID para excluir:", df["id"])
-    if st.button("Excluir"):
-        deletar_transacao(id_del)
-        st.success("Excluído com sucesso.")
-        st.rerun()
+# ==========================================================
+# 🔐 LOGIN / LOGOUT / REGISTRO
+# ==========================================================
 
-if menu == "🚪 Logout":
-    st.session_state.user_id=None
-    st.rerun()
+def interface_login():
+    st.title("🔐 FinTrack Web — Login")
+
+    usuario = st.text_input("Usuário")
+    senha = st.text_input("Senha", type="password")
+
+    if st.button("Entrar"):
+        user_id = autenticar(usuario, senha)
+        if user_id:
+            st.session_state["usuario"] = usuario
+            st.session_state["user_id"] = user_id
+            st.experimental_rerun()
+        else:
+            st.error("Usuário ou senha incorretos.")
+
+    st.write("---")
+    st.subheader("Ainda não tem conta?")
+    if st.button("Criar Conta"):
+        st.session_state["pagina"] = "registro"
+        st.experimental_rerun()
+
+def interface_registro():
+    st.title("📝 Registrar Novo Usuário")
+
+    usuario = st.text_input("Novo Usuário")
+    senha = st.text_input("Defina uma Senha", type="password")
+
+    if st.button("Registrar"):
+        if registrar_usuario(usuario, senha):
+            st.success("Conta criada com sucesso! Faça login.")
+            st.session_state["pagina"] = "login"
+        else:
+            st.error("Nome de usuário já existe.")
+
+    if st.button("Voltar"):
+        st.session_state["pagina"] = "login"
+
+# ==========================================================
+# 🏛 INTERFACE PRINCIPAL — MENU DASHBOARD
+# ==========================================================
+
+def app_principal():
+
+    st.title("💰 FINTRACK WEB — Dashboard Completo")
+
+    menu = st.sidebar.radio("📌 Navegação", [
+        "Dashboard Geral",
+        "➕ Receita",
+        "➖ Despesa",
+        "📋 Transações",
+        "✏ Editar",
+        "🗑 Excluir",
+        "🚪 Logout"
+    ])
+
+    user_id = st.session_state["user_id"]
+
+    # ----------------- DASHBOARD -----------------
+    if menu == "Dashboard Geral":
+        dashboard(user_id)
+
+    # ---------------- RECEITA ------------------
+    if menu == "➕ Receita":
+        valor = st.number_input("Valor", min_value=0.0, format="%.2f")
+        categoria = st.text_input("Categoria")
+        descricao = st.text_area("Descrição")
+        data = st.date_input("Data da Receita")
+
+        if st.button("Salvar Receita"):
+            adicionar_transacao(user_id,"receita",valor,categoria,descricao,str(data))
+            st.success("Receita registrada com sucesso!")
+
+    # ---------------- DESPESA ------------------
+    if menu == "➖ Despesa":
+        valor = st.number_input("Valor", min_value=0.0, format="%.2f")
+        categoria = st.text_input("Categoria")
+        descricao = st.text_area("Descrição")
+        data = st.date_input("Data da Despesa")
+
+        if st.button("Salvar Despesa"):
+            adicionar_transacao(user_id,"despesa",valor,categoria,descricao,str(data))
+            st.success("Despesa registrada com sucesso!")
+
+    # ---------------- LISTAR ------------------
+    if menu == "📋 Transações":
+        st.subheader("Movimentações Financeiras")
+        df = listar_transacoes(user_id)
+        st.dataframe(df)
+
+    # ---------------- EDITAR ------------------
+    if menu == "✏ Editar":
+        df = listar_transacoes(user_id)
+
+        if df.empty:
+            st.warning("Nenhuma transação para editar.")
+        else:
+            id_select = st.number_input("ID da transação", min_value=1)
+            if st.button("Carregar"):
+                dado = df[df["id"]==id_select]
+                if not dado.empty:
+                    valor = st.number_input("Valor", value=float(dado["valor"].values[0]))
+                    categoria = st.text_input("Categoria", dado["categoria"].values[0])
+                    descricao = st.text_area("Descrição", dado["descricao"].values[0])
+                    data = st.date_input("Data", date.fromisoformat(dado["data"].values[0]))
+
+                    if st.button("Salvar Alterações"):
+                        editar_transacao(id_select, valor, categoria, descricao, str(data))
+                        st.success("Alterado com sucesso!")
+                        st.experimental_rerun()
+                else:
+                    st.error("ID não encontrado.")
+
+    # ---------------- EXCLUIR ------------------
+    if menu == "🗑 Excluir":
+        id_del = st.number_input("ID para excluir", min_value=1)
+        if st.button("Deletar"):
+            excluir_transacao(id_del)
+            st.success("Removido!")
+            st.experimental_rerun()
+
+    # ---------------- LOGOUT ------------------
+    if menu == "🚪 Logout":
+        st.session_state.clear()
+        st.experimental_rerun()
+
+# ==========================================================
+# ▶ EXECUÇÃO
+# ==========================================================
+
+if "pagina" not in st.session_state:
+    st.session_state["pagina"] = "login"
+
+if "usuario" not in st.session_state:
+    st.session_state["pagina"] = "login"
+
+if st.session_state["pagina"] == "login":
+    interface_login()
+
+elif st.session_state["pagina"] == "registro":
+    interface_registro()
+
+else:
+    app_principal()
