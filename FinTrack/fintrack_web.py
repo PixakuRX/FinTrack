@@ -284,10 +284,75 @@ if menu == "📊 Analytics":
         st.info("Sem dados de receitas ainda.")
 
 
-# PREVISÃO
+# =============================
+#     🔮 PREVISÃO DO PRÓXIMO MÊS
+# =============================
 if menu == "🔮 Previsão Próximo Mês":
-    st.subheader("Previsão baseada nos últimos 3 meses:")
-    st.write(f"📈 Próxima estimativa: **R$ {prever_prox_mes(user_id)}**")
+
+    st.header("🔮 Projeção Financeira Mensal")
+
+    previsao = prever_prox_mes(user_id)
+    df = listar_transacoes(user_id)
+
+    # Agrupar últimos 3 meses
+    df['mes'] = df['data'].dt.to_period("M").astype(str)
+    ultimos = df.groupby('mes')['valor'].sum().tail(3)
+
+    if len(ultimos) < 3:
+        st.warning("⚠ São necessários pelo menos 3 meses de dados para previsão.")
+    else:
+        m1, m2, m3 = ultimos.iloc[-3], ultimos.iloc[-2], ultimos.iloc[-1]
+
+        # diferença entre meses
+        diff1 = m2 - m1
+        diff2 = m3 - m2
+
+        crescimento_medio = (diff1 + diff2) / 2
+        tendencia = "📈 Crescimento" if crescimento_medio > 0 else "📉 Queda"
+
+        colA, colB, colC = st.columns(3)
+        colA.metric("📅 Mês -2", f"R$ {m1:.2f}")
+        colB.metric("📅 Mês -1", f"R$ {m2:.2f}", f"{diff1:+.2f}")
+        colC.metric("📅 Último mês", f"R$ {m3:.2f}", f"{diff2:+.2f}")
+
+        st.divider()
+        st.subheader("📊 Gráfico Cascata – Evolução até a Previsão")
+
+        import matplotlib.pyplot as plt
+        import numpy as np
+
+        etapas = ["Mês -2", "Mês -1", "Último", "Previsão"]
+        valores = [m1, diff1, diff2, previsao - m3]
+
+        acumulado = [m1, m2, m3, previsao]
+
+        fig, ax = plt.subplots(figsize=(6,4))
+
+        cor = ["grey", "red" if diff1 < 0 else "green",
+                      "red" if diff2 < 0 else "green",
+                      "green" if previsao > m3 else "red"]
+
+        ax.bar(etapas, valores, bottom=[0, m1, m2, m3], color=cor)
+        ax.plot(etapas, acumulado, marker="o", linewidth=2)
+
+        ax.set_title("Evolução dos últimos meses → previsão futura")
+        st.pyplot(fig)
+
+        st.divider()
+        st.subheader("📌 Resultado Final")
+
+        icone = "🟢" if previsao > m3 else "🔴"
+        st.write(f"{icone} **Previsão para o próximo mês:**  
+        💰 Estimativa aproximada: **R$ {previsao:.2f}**")
+
+        # Insight narrativo 
+        st.info(f"""
+        Com base no histórico recente, a tendência atual indica **{tendencia.lower()}**
+        com variação média de **R$ {crescimento_medio:.2f} por mês**.
+        A projeção sugere que o próximo ciclo financeiro deve fechar próximo de:
+        \n➡ **R$ {previsao:.2f}**
+        """)
+
 
 # RECOMENDAÇÕES
 if menu == "💡 Recomendações":
@@ -386,4 +451,5 @@ if menu == "🗑️ Excluir Transação":
 if menu == "🚪 Logout":
     st.session_state.user_id=None
     st.rerun()
+
 
