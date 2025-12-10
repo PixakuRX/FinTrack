@@ -248,7 +248,9 @@ if menu == "📌 Orçamento (Budget)":
     conn = conectar()
     cursor = conn.cursor()
 
-    # Registrar novo limite
+    # ====================
+    # ➕ ADICIONAR NOVO
+    # ====================
     categoria = st.text_input("Categoria")
     limite = st.number_input("Definir limite de gastos", min_value=0.0, format="%.2f")
 
@@ -256,32 +258,52 @@ if menu == "📌 Orçamento (Budget)":
         cursor.execute("INSERT INTO orcamentos (usuario_id, categoria, limite) VALUES (?,?,?)",
                        (user_id, categoria, limite))
         conn.commit()
-        st.success("Orçamento registrado com sucesso!")
+        st.success("📌 Orçamento registrado!")
+
 
     st.divider()
+    st.subheader("📄 Orçamentos Registrados")
 
-    st.subheader("📌 Progresso dos Gastos")
+
+    # ============================
+    # 📥 LISTAR + EDITAR + EXCLUIR
+    # ============================
+
+    cursor.execute("SELECT id, categoria, limite FROM orcamentos WHERE usuario_id=?", (user_id,))
+    orcamentos = cursor.fetchall()
 
     df = listar_transacoes(user_id)
     gastos_por_categoria = df[df["tipo"]=="despesa"].groupby("categoria")["valor"].sum()
 
-    cursor.execute("SELECT categoria, limite FROM orcamentos WHERE usuario_id=?", (user_id,))
-    orcamentos = cursor.fetchall()
-
-    for cat, limite in orcamentos:
+    for oid, cat, limite in orcamentos:
         gasto = gastos_por_categoria.get(cat, 0)
-        progresso = min(gasto/limite,1)
+        progresso = min(gasto / limite, 1)
 
-        st.write(f"**{cat}** – Usado: R$ {gasto:.2f} / Limite R$ {limite:.2f}")
-        st.progress(progresso)
+        with st.expander(f"📌 {cat} — Limite R$ {limite:.2f} (usado R$ {gasto:.2f})"):
 
-        if gasto > limite:
-            st.error("🚨 Você ultrapassou o orçamento!")
-        elif gasto > limite * 0.75:
-            st.warning("⚠ Atenção — já usou mais de 75% do limite!")
-        else:
-            st.success("🟢 Dentro do limite")
+            st.progress(progresso)
 
+            if gasto > limite:
+                st.error("🚨 Você ultrapassou o orçamento!")
+            elif gasto > limite * 0.75:
+                st.warning("⚠ Já atingiu 75% do limite!")
+            else:
+                st.success("🟢 Dentro do limite")
+
+            st.write("### ✏ Editar orçamento")
+            novo_limite = st.number_input("Novo limite", min_value=0.0, value=float(limite), key=f"edit{oid}")
+            if st.button("Salvar alteração", key=f"btn_edit{oid}"):
+                cursor.execute("UPDATE orcamentos SET limite=? WHERE id=?", (novo_limite, oid))
+                conn.commit()
+                st.success("Alterado com sucesso!")
+                st.rerun()
+
+            st.write("---")
+            if st.button("🗑 Excluir orçamento", key=f"del{oid}"):
+                cursor.execute("DELETE FROM orcamentos WHERE id=?", (oid,))
+                conn.commit()
+                st.warning("Orçamento removido.")
+                st.rerun()
 # DELETAR
 if menu == "🗑️ Excluir Transação":
     df = listar_transacoes(user_id)
@@ -295,4 +317,5 @@ if menu == "🗑️ Excluir Transação":
 if menu == "🚪 Logout":
     st.session_state.user_id=None
     st.rerun()
+
 
