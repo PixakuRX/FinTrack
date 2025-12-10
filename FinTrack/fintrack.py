@@ -7,7 +7,7 @@ import re
 import sqlite3
 from datetime import datetime
 
-class FinTrack:  # Aplicativo funcional feito para portifólio (propriedade autoral/intelectual de Eduardo J.)'''
+class FinTrack:  # Aplicativo funcional feito para portifólio (propriedade autoral/intelectual de  Eduardo J.)'''
     # ================================
     #  🔻 1. Inicializa e conecta ao banco
     # ================================
