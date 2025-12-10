@@ -220,12 +220,69 @@ if menu == "📋 Listar Transações":
     df = listar_transacoes(user_id)
     st.dataframe(df)
 
-# ANALYTICS
+# =============================
+#     📊 ANALYTICS 3.0
+# =============================
 if menu == "📊 Analytics":
+
     receitas, gastos, saldo = gerar_relatorio(user_id)
-    st.write(f"📥 Total Receitas: **R$ {receitas:.2f}**")
-    st.write(f"📤 Total Gastos: **R$ {gastos:.2f}**")
-    st.write(f"💰 Saldo Final: **R$ {saldo:.2f}**")
+
+    st.header("📈 Visão Geral Financeira")
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("📥 Total de Receitas", f"R$ {receitas:.2f}")
+    col2.metric("📤 Total de Gastos", f"R$ {gastos:.2f}")
+    col3.metric("💰 Saldo Final", f"R$ {saldo:.2f}")
+
+    st.divider()
+    st.subheader("📊 Distribuição Geral")
+
+    # =============================
+    #  Pie: Receitas x Gastos
+    # =============================
+    import matplotlib.pyplot as plt
+
+    fig1, ax1 = plt.subplots()
+    valores = [receitas, gastos]
+    labels = ["Receitas", "Gastos"]
+    ax1.pie(valores, labels=labels, autopct="%1.1f%%")
+    ax1.set_title("Receitas vs Gastos")
+    st.pyplot(fig1)
+
+    df = listar_transacoes(user_id)
+
+    # =============================
+    #  Pie: Gastos por categoria
+    # =============================
+    st.divider()
+    st.subheader("🍽 Gastos por categoria")
+
+    gastos_cat = df[df["tipo"]=="despesa"].groupby("categoria")["valor"].sum()
+
+    if not gastos_cat.empty:
+        fig2, ax2 = plt.subplots()
+        ax2.pie(gastos_cat.values, labels=gastos_cat.index, autopct="%1.1f%%")
+        ax2.set_title("Distribuição dos Gastos")
+        st.pyplot(fig2)
+    else:
+        st.info("Sem dados de gastos ainda.")
+
+    # =============================
+    #  Pie: Receitas por categoria
+    # =============================
+    st.divider()
+    st.subheader("💵 Receitas por categoria")
+
+    receitas_cat = df[df["tipo"]=="receita"].groupby("categoria")["valor"].sum()
+
+    if not receitas_cat.empty:
+        fig3, ax3 = plt.subplots()
+        ax3.pie(receitas_cat.values, labels=receitas_cat.index, autopct="%1.1f%%")
+        ax3.set_title("Distribuição das Receitas")
+        st.pyplot(fig3)
+    else:
+        st.info("Sem dados de receitas ainda.")
+
 
 # PREVISÃO
 if menu == "🔮 Previsão Próximo Mês":
@@ -236,7 +293,6 @@ if menu == "🔮 Previsão Próximo Mês":
 if menu == "💡 Recomendações":
     st.subheader("Sugestão automatizada:")
     st.write(recomenda_financeiro(user_id))
-
 
 # =============================
 #   🔥 MODULO DE ORÇAMENTO
@@ -268,7 +324,6 @@ if menu == "📌 Orçamento (Budget)":
     # ============================
     # 📥 LISTAR + EDITAR + EXCLUIR
     # ============================
-
     cursor.execute("SELECT id, categoria, limite FROM orcamentos WHERE usuario_id=?", (user_id,))
     orcamentos = cursor.fetchall()
 
@@ -279,49 +334,9 @@ if menu == "📌 Orçamento (Budget)":
         gasto = gastos_por_categoria.get(cat, 0)
         progresso = min(gasto / limite, 1)
 
-        with st.expander(f"📌 {cat} — Limite R$ {limite:.2f} (usado R$ {gasto:.2f})"):
+        with st.expander(f"📌 {cat} — Limite: R$ {limite:.2f} | Usado: R$ {gasto:.2f}"):
 
-            # ===== BARRA DE PROGRESSO PERSONALIZADA =====
-percent = progresso * 100  # valor em %
-cor = "#00A8FF"  # azul padrão
-
-# cor muda conforme o uso
-if gasto > limite:
-    cor = "red"
-elif gasto > limite * 0.75:
-    cor = "#f1c40f"  # amarelo 75%
-
-# animação caso estoure o limite
-animacao = "blinker 1s linear infinite;" if gasto > limite else ""
-
-barra_html = f"""
-<style>
-.progress-container {{
-    width: 100%;
-    background-color: #222;
-    border-radius: 10px;
-    height: 18px;
-    margin-bottom: 10px;
-}}
-.progress-bar {{
-    height: 100%;
-    width: {percent}%;
-    background-color: {cor};
-    border-radius: 10px;
-    animation: {animacao}
-}}
-@keyframes blinker {{
-    50% {{ opacity: 0.3; }}
-}}
-</style>
-
-<div class="progress-container">
-    <div class="progress-bar"></div>
-</div>
-"""
-
-st.markdown(barra_html, unsafe_allow_html=True)
-
+            st.progress(progresso)
 
             if gasto > limite:
                 st.error("🚨 Você ultrapassou o orçamento!")
@@ -330,20 +345,34 @@ st.markdown(barra_html, unsafe_allow_html=True)
             else:
                 st.success("🟢 Dentro do limite")
 
-            st.write("### ✏ Editar orçamento")
-            novo_limite = st.number_input("Novo limite", min_value=0.0, value=float(limite), key=f"edit{oid}")
+            # ===============================
+            # ✏ ALTERAR ORÇAMENTO
+            # ===============================
+            st.write("### ✏ Editar limite do orçamento")
+            novo_limite = st.number_input("Novo limite",
+                                          min_value=0.0,
+                                          value=float(limite),
+                                          key=f"edit{oid}")
+
             if st.button("Salvar alteração", key=f"btn_edit{oid}"):
                 cursor.execute("UPDATE orcamentos SET limite=? WHERE id=?", (novo_limite, oid))
                 conn.commit()
-                st.success("Alterado com sucesso!")
+                st.success("Limite alterado com sucesso!")
                 st.rerun()
 
+
             st.write("---")
+
+            # ===============================
+            # 🗑 EXCLUIR ORÇAMENTO
+            # ===============================
             if st.button("🗑 Excluir orçamento", key=f"del{oid}"):
                 cursor.execute("DELETE FROM orcamentos WHERE id=?", (oid,))
                 conn.commit()
                 st.warning("Orçamento removido.")
                 st.rerun()
+
+
 # DELETAR
 if menu == "🗑️ Excluir Transação":
     df = listar_transacoes(user_id)
@@ -357,6 +386,4 @@ if menu == "🗑️ Excluir Transação":
 if menu == "🚪 Logout":
     st.session_state.user_id=None
     st.rerun()
-
-
 
