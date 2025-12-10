@@ -1,160 +1,226 @@
 import sqlite3
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
 from datetime import datetime
-from collections import defaultdict
-import statistics
 
-class FinTrack:
+# ================================
+#   BANCO DE DADOS
+# ================================
+def conectar():
+    return sqlite3.connect("fintrack.db", check_same_thread=False)
 
-    def __init__(self, arquivo_db="fintrack.db"):
-        self.db = arquivo_db
-        self._criar_tabela_transacoes()
-        self.transacoes = self._carregar_transacoes()
+def criar_tabelas():
+    conn = conectar()
+    cursor = conn.cursor()
 
-    # ---------------- BANCO ---------------- #
-    def _conectar(self):
-        return sqlite3.connect(self.db)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario TEXT UNIQUE NOT NULL,
+        senha TEXT NOT NULL
+    )
+    """)
 
-    def _criar_tabela_transacoes(self):
-        conn = self._conectar()
-        conn.execute("""
-        CREATE TABLE IF NOT EXISTS transacoes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tipo TEXT,
-            valor REAL,
-            categoria TEXT,
-            descricao TEXT,
-            data TEXT
-        )
-        """)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS transacoes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario_id INTEGER NOT NULL,
+        tipo TEXT NOT NULL,
+        valor REAL NOT NULL,
+        categoria TEXT,
+        descricao TEXT,
+        data TEXT NOT NULL,
+        FOREIGN KEY(usuario_id) REFERENCES usuarios(id)
+    )
+    """)
+
+    conn.commit()
+    conn.close()
+
+criar_tabelas()
+
+# ================================
+#  AUTENTICAÇÃO / LOGIN / REGISTRO
+# ================================
+def registrar_user(usuario, senha):
+    conn = conectar()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("INSERT INTO usuarios (usuario, senha) VALUES (?,?)", (usuario, senha))
         conn.commit()
-        conn.close()
-
-    def _carregar_transacoes(self):
-        conn = self._conectar()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, tipo, valor, categoria, descricao, data FROM transacoes")
-        dados = cursor.fetchall()
-        conn.close()
-
-        return [
-            {
-                "id": d[0],
-                "tipo": d[1],
-                "valor": float(d[2]),
-                "categoria": d[3],
-                "descricao": d[4],
-                "data": d[5],
-            } for d in dados
-        ]
-
-    def salvar_dados(self):
-        pass  # 🔥 para manter compatibilidade, mas agora não é mais necessário
-
-
-    # ---------------- OPERAÇÕES CRUD ---------------- #
-    def adicionar_transacao(self, tipo, valor, categoria, descricao="", data=None):
-        if data is None:
-            data = datetime.now().strftime("%Y-%m-%d")
-
-        valor = float(str(valor).replace(",", "."))
-
-        conn = self._conectar()
-        conn.execute(
-            "INSERT INTO transacoes (tipo, valor, categoria, descricao, data) VALUES (?, ?, ?, ?, ?)",
-            (tipo, valor, categoria, descricao, data)
-        )
-        conn.commit()
-        conn.close()
-
-        self.transacoes = self._carregar_transacoes()
-
-    def listar_transacoes(self, mes=None, ano=None):
-        if mes and ano:
-            return [t for t in self.transacoes if t["data"][5:7] == f"{mes:02d}" and t["data"][:4] == str(ano)]
-        return self.transacoes
-
-    def editar_transacao(self, id, **novos_dados):
-        conn = self._conectar()
-        trans = self.buscar_transacao(id)
-        if not trans:
-            return False
-
-        trans.update(novos_dados)
-        conn.execute(
-            "UPDATE transacoes SET tipo=?, valor=?, categoria=?, descricao=?, data=? WHERE id=?",
-            (trans["tipo"], trans["valor"], trans["categoria"], trans["descricao"], trans["data"], id)
-        )
-
-        conn.commit()
-        conn.close()
-        self.transacoes = self._carregar_transacoes()
         return True
+    except:
+        return False
 
-    def deletar_transacao(self, id):
-        conn = self._conectar()
-        conn.execute("DELETE FROM transacoes WHERE id=?", (id,))
-        conn.commit()
-        conn.close()
-        self.transacoes = self._carregar_transacoes()
-
-
-    # ---------------- UTILIDADES ---------------- #
-    def buscar_transacao(self, id):
-        return next((t for t in self.transacoes if t["id"] == id), None)
-
-    def validar_categoria(self, categoria, tipo):
-        categoria = categoria.strip().title()
-        aviso = None
-        # Aqui você pode manter suas regras
-        return categoria, aviso
+def login(usuario, senha):
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM usuarios WHERE usuario = ? AND senha = ?", (usuario, senha))
+    result = cursor.fetchone()
+    return result[0] if result else None
 
 
-    # ---------------- ANÁLISES ---------------- #
-    def analisar_gastos(self, mes=None, ano=None):
-        trans = self.listar_transacoes(mes, ano)
-        if not trans:
-            return None
+# ================================
+#    CRUD FINANCEIRO (SQLite)
+# ================================
+def adicionar_transacao(user_id, tipo, valor, categoria, descricao):
+    conn = conectar()
+    cursor = conn.cursor()
+    data = datetime.now().strftime("%Y-%m-%d")
+    cursor.execute("""
+    INSERT INTO transacoes (usuario_id, tipo, valor, categoria, descricao, data)
+    VALUES (?,?,?,?,?,?)
+    """, (user_id, tipo, valor, categoria, descricao, data))
+    conn.commit()
 
-        receitas = sum(t["valor"] for t in trans if t["tipo"] == "receita")
-        despesas = sum(t["valor"] for t in trans if t["tipo"] == "despesa")
-        saldo = receitas - despesas
+def listar_transacoes(user_id):
+    conn = conectar()
+    df = pd.read_sql_query("SELECT * FROM transacoes WHERE usuario_id = ?", conn, params=[user_id])
+    return df
 
-        gastos_categoria = defaultdict(float)
-        for t in trans:
-            if t["tipo"] == "despesa":
-                gastos_categoria[t["categoria"]] += t["valor"]
+def editar_transacao(id, valor, categoria, descricao):
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute("""
+    UPDATE transacoes SET valor=?, categoria=?, descricao=? WHERE id=?
+    """, (valor, categoria, descricao, id))
+    conn.commit()
 
-        return {
-            "receitas": receitas,
-            "despesas": despesas,
-            "saldo": saldo,
-            "gastos_categoria": dict(gastos_categoria),
-        }
-
-    def prever_proximo_mes(self):
-        mensal = defaultdict(lambda: {"receita":0, "despesa":0})
-
-        for t in self.transacoes:
-            chave = t["data"][:7]
-            if t["tipo"]=="receita": mensal[chave]["receita"]+=t["valor"]
-            if t["tipo"]=="despesa": mensal[chave]["despesa"]+=t["valor"]
-
-        if len(mensal)<2:
-            return None
-        
-        rec = statistics.mean(v["receita"] for v in mensal.values())
-        des = statistics.mean(v["despesa"] for v in mensal.values())
-        
-        return {
-            "receita_prevista": rec,
-            "despesa_prevista": des,
-            "saldo_previsto": rec-des
-        }
-
-    def gerar_recomendacoes(self):
-        anal = self.analisar_gastos()
-        if not anal: return None
-        # Aqui você pode manter seu sistema de sugestões
-        print("💡 Recomendações automáticas baseadas nos gastos.")
+def deletar_transacao(id):
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM transacoes WHERE id=?", (id,))
+    conn.commit()
 
 
+# ================================
+#   📊 Analytics
+# ================================
+def gerar_relatorio(user_id):
+    df = listar_transacoes(user_id)
+    if df.empty:
+        return None, None
+
+    total_gastos = df[df["tipo"]=="despesa"]["valor"].sum()
+    total_receitas = df[df["tipo"]=="receita"]["valor"].sum()
+    saldo = total_receitas - total_gastos
+
+    return total_receitas, total_gastos, saldo
+
+def prever_prox_mes(user_id):
+    df = listar_transacoes(user_id)
+    if df.empty:
+        return "Dados insuficientes"
+
+    ultimos = df.tail(3)["valor"].mean()
+    return round(ultimos,2)
+
+def recomenda_financeiro(user_id):
+    receitas, gastos, saldo = gerar_relatorio(user_id)
+    if saldo < 0:
+        return "⚠ Você está gastando mais do que ganha! Corte despesas urgentes."
+    elif saldo < receitas * 0.2:
+        return "🟡 Bom controle, mas margem baixa. Tente guardar mais 10%."
+    else:
+        return "🟢 Excelente! Continue assim e invista o excedente."
+
+
+# ================================
+#           INTERFACE WEB
+# ================================
+st.title("💰 FINTRACK WEB — Controle Financeiro")
+
+# LOGIN
+if "user_id" not in st.session_state:
+    st.session_state.user_id = None
+
+if st.session_state.user_id is None:
+
+    tab1, tab2 = st.tabs(["🔐 Login", "📝 Criar Conta"])
+
+    with tab1:
+        usuario = st.text_input("Usuário")
+        senha = st.text_input("Senha", type="password")
+        if st.button("Entrar"):
+            uid = login(usuario, senha)
+            if uid:
+                st.session_state.user_id = uid
+                st.rerun()
+            else:
+                st.error("Usuário ou senha incorretos")
+
+    with tab2:
+        new_user = st.text_input("Novo usuário")
+        new_pass = st.text_input("Nova senha", type="password")
+        if st.button("Registrar-se"):
+            if registrar_user(new_user, new_pass):
+                st.success("Conta criada com sucesso! Agora faça login.")
+            else:
+                st.error("Usuário já existe")
+
+    st.stop()
+
+
+# ================================
+#        MENU PRINCIPAL (WEB)
+# ================================
+menu = st.sidebar.radio("Menu", [
+    "➕ Adicionar Receita",
+    "➖ Adicionar Despesa",
+    "📋 Listar Transações",
+    "📊 Analytics",
+    "🔮 Previsão Próximo Mês",
+    "💡 Recomendações",
+    "🗑️ Excluir Transação",
+    "🚪 Logout"
+])
+
+user_id = st.session_state.user_id
+
+if menu == "➕ Adicionar Receita":
+    valor = st.number_input("Valor", min_value=0.0, format="%.2f")
+    categoria = st.text_input("Categoria")
+    descricao = st.text_area("Descrição")
+    if st.button("Salvar Receita"):
+        adicionar_transacao(user_id,"receita",valor,categoria,descricao)
+        st.success("Receita registrada!")
+
+if menu == "➖ Adicionar Despesa":
+    valor = st.number_input("Valor", min_value=0.0, format="%.2f")
+    categoria = st.text_input("Categoria")
+    descricao = st.text_area("Descrição")
+    if st.button("Salvar Despesa"):
+        adicionar_transacao(user_id,"despesa",valor,categoria,descricao)
+        st.success("Despesa registrada!")
+
+if menu == "📋 Listar Transações":
+    df = listar_transacoes(user_id)
+    st.dataframe(df)
+
+if menu == "📊 Analytics":
+    receitas, gastos, saldo = gerar_relatorio(user_id)
+    st.write(f"📥 Total Receitas: **R$ {receitas:.2f}**")
+    st.write(f"📤 Total Gastos: **R$ {gastos:.2f}**")
+    st.write(f"💰 Saldo Final: **R$ {saldo:.2f}**")
+
+if menu == "🔮 Previsão Próximo Mês":
+    st.subheader("Previsão baseada nos últimos 3 meses:")
+    st.write(f"📈 Próxima estimativa: **R$ {prever_prox_mes(user_id)}**")
+
+if menu == "💡 Recomendações":
+    st.subheader("Sugestão automatizada:")
+    st.write(recomenda_financeiro(user_id))
+
+if menu == "🗑️ Excluir Transação":
+    df = listar_transacoes(user_id)
+    id_del = st.selectbox("ID para excluir:", df["id"])
+    if st.button("Excluir"):
+        deletar_transacao(id_del)
+        st.success("Excluído com sucesso.")
+        st.rerun()
+
+if menu == "🚪 Logout":
+    st.session_state.user_id=None
+    st.rerun()
