@@ -143,7 +143,7 @@ def interface_login():
     st.subheader("Ainda não tem conta?")
     if st.button("Criar Conta"):
         st.session_state["pagina"] = "registro"
-        st.experimental_rerun()
+        st.rerun()
 
 def interface_registro():
     st.title("📝 Registrar Novo Usuário")
@@ -232,7 +232,7 @@ def app_principal():
                     if st.button("Salvar Alterações"):
                         editar_transacao(id_select, valor, categoria, descricao, str(data))
                         st.success("Alterado com sucesso!")
-                        st.experimental_rerun()
+                        st.rerun()
                 else:
                     st.error("ID não encontrado.")
 
@@ -242,12 +242,12 @@ def app_principal():
         if st.button("Deletar"):
             excluir_transacao(id_del)
             st.success("Removido!")
-            st.experimental_rerun()
+            st.rerun()
 
     # ---------------- LOGOUT ------------------
     if menu == "🚪 Logout":
         st.session_state.clear()
-        st.experimental_rerun()
+        st.rerun()
 
 # ==========================================================
 # ▶ EXECUÇÃO
