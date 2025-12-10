@@ -281,7 +281,47 @@ if menu == "📌 Orçamento (Budget)":
 
         with st.expander(f"📌 {cat} — Limite R$ {limite:.2f} (usado R$ {gasto:.2f})"):
 
-            st.progress(progresso)
+            # ===== BARRA DE PROGRESSO PERSONALIZADA =====
+percent = progresso * 100  # valor em %
+cor = "#00A8FF"  # azul padrão
+
+# cor muda conforme o uso
+if gasto > limite:
+    cor = "red"
+elif gasto > limite * 0.75:
+    cor = "#f1c40f"  # amarelo 75%
+
+# animação caso estoure o limite
+animacao = "blinker 1s linear infinite;" if gasto > limite else ""
+
+barra_html = f"""
+<style>
+.progress-container {{
+    width: 100%;
+    background-color: #222;
+    border-radius: 10px;
+    height: 18px;
+    margin-bottom: 10px;
+}}
+.progress-bar {{
+    height: 100%;
+    width: {percent}%;
+    background-color: {cor};
+    border-radius: 10px;
+    animation: {animacao}
+}}
+@keyframes blinker {{
+    50% {{ opacity: 0.3; }}
+}}
+</style>
+
+<div class="progress-container">
+    <div class="progress-bar"></div>
+</div>
+"""
+
+st.markdown(barra_html, unsafe_allow_html=True)
+
 
             if gasto > limite:
                 st.error("🚨 Você ultrapassou o orçamento!")
@@ -317,5 +357,6 @@ if menu == "🗑️ Excluir Transação":
 if menu == "🚪 Logout":
     st.session_state.user_id=None
     st.rerun()
+
 
 
