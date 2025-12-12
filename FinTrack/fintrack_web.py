@@ -227,7 +227,7 @@ if menu == "📊 Analytics":
 
     receitas, gastos, saldo = gerar_relatorio(user_id)
 
-    st.header("📈 Visão Geral Financeira")
+    st.header("📈 Geralzão")
 
     col1, col2, col3 = st.columns(3)
     col1.metric("📥 Total de Receitas", f"R$ {receitas:.2f}")
@@ -450,6 +450,7 @@ if menu == "🗑️ Excluir Transação":
 if menu == "🚪 Logout":
     st.session_state.user_id=None
     st.rerun()
+
 
 
 
